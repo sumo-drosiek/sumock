@@ -1,0 +1,8 @@
+FROM python:3
+
+RUN pip install pipenv
+ADD Pipfile Pipfile.lock /
+RUN pipenv install --system
+
+COPY src /src
+ENTRYPOINT ["/usr/local/bin/python3", "-u", "/src/main.py"]
