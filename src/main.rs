@@ -17,6 +17,7 @@ async fn handle(
   req: Request<Body>,
   metrics: Arc<Mutex<u64>>,
   logs: Arc<Mutex<u64>>,
+  logs_bytes: Arc<Mutex<u64>>,
   ts: Arc<Mutex<u64>>
 ) -> Result<Response<Body>, Infallible> {
     let uri = req.uri().path();
@@ -39,6 +40,10 @@ async fn handle(
         "application/x-www-form-urlencoded" => {
           let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
           let vector_body = whole_body.into_iter().collect::<Vec<u8>>();
+
+          let mut logs_bytes = logs_bytes.lock().unwrap();
+          *logs_bytes += vector_body.len() as u64;
+
           let string_body = String::from_utf8(vector_body).unwrap();
 
           let mut logs = logs.lock().unwrap();
@@ -48,23 +53,25 @@ async fn handle(
           println!("invalid header value");
         }
       }
-      stats(metrics, logs, ts);
+      stats(metrics, logs, logs_bytes, ts);
       Ok(Response::new("".into()))
     }
 }
 
-async fn run_app(metrics: Arc<Mutex<u64>>, logs: Arc<Mutex<u64>>, ts: Arc<Mutex<u64>>) {
+async fn run_app(metrics: Arc<Mutex<u64>>, logs: Arc<Mutex<u64>>, logs_bytes: Arc<Mutex<u64>>, ts: Arc<Mutex<u64>>) {
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     println!("Sumock is waiting for enemy on 0.0.0.0:3000!");
     let make_svc = make_service_fn(|_conn| {
       let metrics = metrics.clone();
       let logs = logs.clone();
+      let logs_bytes = logs_bytes.clone();
       let ts = ts.clone();
       async move {
         let metrics = metrics.clone();
         let logs = logs.clone();
+        let logs_bytes = logs_bytes.clone();
         let ts = ts.clone();
-        let result = service_fn(move |req| handle(req, metrics.clone(), logs.clone(), ts.clone()));
+        let result = service_fn(move |req| handle(req, metrics.clone(), logs.clone(), logs_bytes.clone(), ts.clone()));
         Ok::<_, Infallible>(result)
     }});
 
@@ -76,16 +83,18 @@ async fn run_app(metrics: Arc<Mutex<u64>>, logs: Arc<Mutex<u64>>, ts: Arc<Mutex<
 
 }
 
-fn stats(metrics: Arc<Mutex<u64>>, logs: Arc<Mutex<u64>>, ts: Arc<Mutex<u64>>) {
+fn stats(metrics: Arc<Mutex<u64>>, logs: Arc<Mutex<u64>>, logs_bytes: Arc<Mutex<u64>>, ts: Arc<Mutex<u64>>) {
   let mut metrics = metrics.lock().unwrap();
   let mut logs = logs.lock().unwrap();
+  let mut logs_bytes = logs_bytes.lock().unwrap();
   let mut ts = ts.lock().unwrap();
 
   if get_now() >= *ts + 60 {
-      println!("{} Metrics: {:10.} Logs: {:10.}", *ts, *metrics, *logs);
+      println!("{} Metrics: {:10.} Logs: {:10.}; {:10} MB/s", *ts, *metrics, *logs_bytes/(get_now()-*ts)/1e6, *logs);
       *ts = get_now();
       *metrics = 0;
       *logs = 0;
+      *logs_bytes = 0;
   }
 }
 
@@ -93,7 +102,8 @@ fn stats(metrics: Arc<Mutex<u64>>, logs: Arc<Mutex<u64>>, ts: Arc<Mutex<u64>>) {
 pub async fn main() {
     let metrics = Arc::new(Mutex::new(0 as u64));
     let logs = Arc::new(Mutex::new(0 as u64));
+    let logs_bytes = Arc::new(Mutex::new(0 as u64));
     let ts = Arc::new(Mutex::new(get_now()));
 
-    run_app(metrics, logs, ts).await;
+    run_app(metrics, logs, logs_bytes, ts).await;
 }
