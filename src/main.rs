@@ -89,7 +89,7 @@ sumock_logs_bytes_count {}",
           let lines = string_body.trim().split("\n");
 
           for line in lines {
-            let metric_name = line.split(" ").nth(0).unwrap().to_string();
+            let metric_name = line.split("{").nth(0).unwrap().to_string();
             if !(*statistics).metrics_list.contains(&metric_name) {
               (*statistics).metrics_list.push(metric_name);
             }
