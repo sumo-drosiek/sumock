@@ -5,6 +5,7 @@ use hyper::header::HeaderValue;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::vec::Vec;
 
 fn get_now() -> u64 {
   let start = SystemTime::now();
@@ -20,7 +21,8 @@ struct Statistics {
   p_metrics: u64,
   p_logs: u64,
   p_logs_bytes: u64,
-  ts: u64
+  ts: u64,
+  metrics_list: Vec<String>,
 }
 
 async fn handle(req: Request<Body>, statistics: Arc<Mutex<Statistics>>) -> Result<Response<Body>, Infallible> {
@@ -28,6 +30,15 @@ async fn handle(req: Request<Body>, statistics: Arc<Mutex<Statistics>>) -> Resul
 
     if uri.starts_with("/terraform") {
         Ok(Response::new("{\"source\": {\"url\": \"http://sumock.sumock:3000/receiver\"}}".into()))
+    }
+    else if uri.starts_with("/metrics-list") {
+      let statistics = statistics.lock().unwrap();
+      let mut string = "".to_string();
+      for metric in (*statistics).metrics_list.iter() {
+        string += &metric;
+        string += "\n";
+      }
+      Ok(Response::new(format!("Metrics: {}", string).into()))
     }
     else if uri.starts_with("/metrics-json") {
       let statistics = statistics.lock().unwrap();
@@ -75,7 +86,15 @@ sumock_logs_bytes_count {}",
           let vector_body = whole_body.into_iter().collect::<Vec<u8>>();
           let string_body = String::from_utf8(vector_body).unwrap();
           
-          (*statistics).metrics += string_body.trim().split("\n").count() as u64;
+          let lines = string_body.trim().split("\n");
+
+          for line in lines {
+            let metric_name = line.split(" ").nth(0).unwrap().to_string();
+            if !(*statistics).metrics_list.contains(&metric_name) {
+              (*statistics).metrics_list.push(metric_name);
+            }
+            (*statistics).metrics += 1;
+          }
         },
         "application/x-www-form-urlencoded" => {
           let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
@@ -142,7 +161,8 @@ pub async fn main() {
       p_metrics: 0,
       p_logs: 0,
       p_logs_bytes: 0,
-      ts: get_now()
+      ts: get_now(),
+      metrics_list: Vec::new(),
     };
     let statistics = Arc::new(Mutex::new(statistics));
 
