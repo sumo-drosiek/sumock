@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::vec::Vec;
+use std::collections::HashMap;
 
 fn get_now() -> u64 {
   let start = SystemTime::now();
@@ -22,27 +23,32 @@ struct Statistics {
   p_logs: u64,
   p_logs_bytes: u64,
   ts: u64,
-  metrics_list: Vec<String>,
+  metrics_list: HashMap<String, u64>,
 }
 
 async fn handle(req: Request<Body>, statistics: Arc<Mutex<Statistics>>) -> Result<Response<Body>, Infallible> {
     let uri = req.uri().path();
 
     if uri.starts_with("/terraform") {
+      // ToDo: Do it properly, like human
         Ok(Response::new("{\"source\": {\"url\": \"http://sumock.sumock:3000/receiver\"}}".into()))
     }
     else if uri.starts_with("/metrics-list") {
       let statistics = statistics.lock().unwrap();
       let mut string = "".to_string();
       for metric in (*statistics).metrics_list.iter() {
-        string += &metric;
+        string += &metric.0;
+        string += ": ";
+        string += &metric.1.to_string();
         string += "\n";
       }
-      Ok(Response::new(format!("Metrics: {}", string).into()))
+      // ToDo: Do it properly, like human in json
+      Ok(Response::new(format!("{}", string).into()))
     }
     else if uri.starts_with("/metrics-json") {
       let statistics = statistics.lock().unwrap();
 
+      // ToDo: Do it properly, like human
       Ok(Response::new(format!("{{
         \"timestamp\": {},
         \"last_minute_stats\": {{
@@ -90,9 +96,14 @@ sumock_logs_bytes_count {}",
 
           for line in lines {
             let metric_name = line.split("{").nth(0).unwrap().to_string();
-            if !(*statistics).metrics_list.contains(&metric_name) {
-              (*statistics).metrics_list.push(metric_name);
-            }
+            let saved_metric = (*statistics).metrics_list.entry(metric_name).or_insert(0);
+            *saved_metric += 1;
+            // if (*statistics).metrics_list.contains_key(&metric_name) {
+            //   (*statistics).metrics_list.insert(metric_name, 0);
+            // }
+            // else {
+            //   (*statistics).metrics_list
+            // }
             (*statistics).metrics += 1;
           }
         },
@@ -162,7 +173,7 @@ pub async fn main() {
       p_logs: 0,
       p_logs_bytes: 0,
       ts: get_now(),
-      metrics_list: Vec::new(),
+      metrics_list: HashMap::new(),
     };
     let statistics = Arc::new(Mutex::new(statistics));
 
