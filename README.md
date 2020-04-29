@@ -33,7 +33,7 @@ There are endpoints which provides statistics:
   prometheus_remote_storage_string_interner_zero_reference_releases_total: 10
   prometheus_remote_storage_succeeded_samples_total: 100
   ```
- * `/metrics-clean` - clean the metrics counter (zeroes `/metrics-list`)
+ * `/metrics-reset` - reset the metrics counter (zeroes `/metrics-list`)
 
 # Disclaimer
 

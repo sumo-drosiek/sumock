@@ -52,12 +52,12 @@ sumock_logs_bytes_count {}",
           (*statistics).logs,
           (*statistics).logs_bytes).into()))
       },
-      "/metrics-clean" => {
+      "/metrics-reset" => {
         let mut statistics = statistics.lock().unwrap();
         for (_, val) in (*statistics).metrics_list.iter_mut() {
           *val = 0;
         }
-        Ok(Response::new("".into()))
+        Ok(Response::new("All counters reset successfully".into()))
       }
       _ => {
         if uri.starts_with("/terraform") {
