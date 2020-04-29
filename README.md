@@ -8,6 +8,8 @@ Sumock is an small contenerised application written in rust which can be used fo
 cargo run
 ```
 
+Sumock is listening on port 3000. For now it cannot get any arguments
+
 ## Terraform mock
 
 It expose the `/terraform.*` url which can be used to set HTTP source for k8s collection to sumock itself
