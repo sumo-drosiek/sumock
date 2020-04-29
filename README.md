@@ -1,6 +1,6 @@
 # Sumock
 
-Sumock is an small contenerised application written in rust which can be used for local testing the [`kubernetes sumologic collection`](https://github.com/SumoLogic/sumologic-kubernetes-collection)
+Sumock is an small contenerised application written in rust which can be used for local testing of the [`kubernetes sumologic collection`](https://github.com/SumoLogic/sumologic-kubernetes-collection)
 
 ## Running
 
