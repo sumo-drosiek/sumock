@@ -28,78 +28,79 @@ struct Statistics {
 
 async fn handle(req: Request<Body>, statistics: Arc<Mutex<Statistics>>) -> Result<Response<Body>, Infallible> {
     let uri = req.uri().path();
-
-    if uri.starts_with("/terraform") {
-      // ToDo: Do it properly, like human
-        Ok(Response::new("{\"source\": {\"url\": \"http://sumock.sumock:3000/receiver\"}}".into()))
-    }
-    else if uri.starts_with("/metrics-clean") {
-      let mut statistics = statistics.lock().unwrap();
-      for (_, val) in (*statistics).metrics_list.iter_mut() {
-        *val = 0;
+    
+    match uri {
+      "/metrics-list" => {
+        let statistics = statistics.lock().unwrap();
+        let mut string = "".to_string();
+        for metric in (*statistics).metrics_list.iter() {
+          string.push_str(&format!("{}: {}\n", &metric.0, &metric.1));
+        }
+        // ToDo: Do it properly, like human in json
+        Ok(Response::new(format!("{}", string).into()))
       }
-      Ok(Response::new("".into()))
-    }
-    else if uri.starts_with("/metrics-list") {
-      let statistics = statistics.lock().unwrap();
-      let mut string = "".to_string();
-      for metric in (*statistics).metrics_list.iter() {
-        string += &metric.0;
-        string += ": ";
-        string += &metric.1.to_string();
-        string += "\n";
-      }
-      // ToDo: Do it properly, like human in json
-      Ok(Response::new(format!("{}", string).into()))
-    }
-    else if uri.starts_with("/metrics") {
-      let statistics = statistics.lock().unwrap();
-
-      Ok(Response::new(format!("# TYPE sumock_metrics_count counter
+      "/metrics" => {
+        let statistics = statistics.lock().unwrap();
+  
+        Ok(Response::new(format!("# TYPE sumock_metrics_count counter
 sumock_metrics_count {}
 # TYPE sumock_logs_count counter
 sumock_logs_count {}
 # TYPE sumock_logs_bytes_count counter
 sumock_logs_bytes_count {}",
-(*statistics).metrics,
-(*statistics).logs,
-(*statistics).logs_bytes).into()))
-    }
-    else {
-      let empty_header = HeaderValue::from_str("").unwrap();
-      let content_type = req.headers().get("content-type").unwrap_or(&empty_header).to_str().unwrap();
-      match content_type {
-        "application/vnd.sumologic.prometheus" => {
-          let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
-          let mut statistics = statistics.lock().unwrap();
-          let vector_body = whole_body.into_iter().collect::<Vec<u8>>();
-          let string_body = String::from_utf8(vector_body).unwrap();
-          
-          let lines = string_body.trim().split("\n");
-
-          for line in lines {
-            let metric_name = line.split("{").nth(0).unwrap().to_string();
-            let saved_metric = (*statistics).metrics_list.entry(metric_name).or_insert(0);
-            *saved_metric += 1;
-            (*statistics).metrics += 1;
+          (*statistics).metrics,
+          (*statistics).logs,
+          (*statistics).logs_bytes).into()))
+      },
+      "/metrics-clean" => {
+        let mut statistics = statistics.lock().unwrap();
+        for (_, val) in (*statistics).metrics_list.iter_mut() {
+          *val = 0;
+        }
+        Ok(Response::new("".into()))
+      }
+      _ => {
+        if uri.starts_with("/terraform") {
+          // ToDo: Do it properly, like human
+          Ok(Response::new("{\"source\": {\"url\": \"http://sumock.sumock:3000/receiver\"}}".into()))
+        }
+        else {
+          let empty_header = HeaderValue::from_str("").unwrap();
+          let content_type = req.headers().get("content-type").unwrap_or(&empty_header).to_str().unwrap();
+          match content_type {
+            "application/vnd.sumologic.prometheus" => {
+              let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
+              let mut statistics = statistics.lock().unwrap();
+              let vector_body = whole_body.into_iter().collect::<Vec<u8>>();
+              let string_body = String::from_utf8(vector_body).unwrap();
+              
+              let lines = string_body.trim().split("\n");
+    
+              for line in lines {
+                let metric_name = line.split("{").nth(0).unwrap().to_string();
+                let saved_metric = (*statistics).metrics_list.entry(metric_name).or_insert(0);
+                *saved_metric += 1;
+                (*statistics).metrics += 1;
+              }
+            },
+            "application/x-www-form-urlencoded" => {
+              let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
+              let vector_body = whole_body.into_iter().collect::<Vec<u8>>();
+    
+              let mut statistics = statistics.lock().unwrap();
+              (*statistics).logs_bytes += vector_body.len() as u64;
+    
+              let string_body = String::from_utf8(vector_body).unwrap();
+              (*statistics).logs += string_body.trim().split("\n").count() as u64;
+            },
+            &_ => {
+              println!("invalid header value");
+            }
           }
-        },
-        "application/x-www-form-urlencoded" => {
-          let whole_body = hyper::body::to_bytes(req.into_body()).await.unwrap();
-          let vector_body = whole_body.into_iter().collect::<Vec<u8>>();
-
-          let mut statistics = statistics.lock().unwrap();
-          (*statistics).logs_bytes += vector_body.len() as u64;
-
-          let string_body = String::from_utf8(vector_body).unwrap();
-          (*statistics).logs += string_body.trim().split("\n").count() as u64;
-        },
-        &_ => {
-          println!("invalid header value");
+          stats(statistics);
+          Ok(Response::new("".into()))
         }
       }
-      stats(statistics);
-      Ok(Response::new("".into()))
     }
 }
 
