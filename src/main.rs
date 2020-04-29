@@ -33,6 +33,13 @@ async fn handle(req: Request<Body>, statistics: Arc<Mutex<Statistics>>) -> Resul
       // ToDo: Do it properly, like human
         Ok(Response::new("{\"source\": {\"url\": \"http://sumock.sumock:3000/receiver\"}}".into()))
     }
+    else if uri.starts_with("/metrics-clean") {
+      let mut statistics = statistics.lock().unwrap();
+      for (_, val) in (*statistics).metrics_list.iter_mut() {
+        *val = 0;
+      }
+      Ok(Response::new("".into()))
+    }
     else if uri.starts_with("/metrics-list") {
       let statistics = statistics.lock().unwrap();
       let mut string = "".to_string();
@@ -44,30 +51,6 @@ async fn handle(req: Request<Body>, statistics: Arc<Mutex<Statistics>>) -> Resul
       }
       // ToDo: Do it properly, like human in json
       Ok(Response::new(format!("{}", string).into()))
-    }
-    else if uri.starts_with("/metrics-json") {
-      let statistics = statistics.lock().unwrap();
-
-      // ToDo: Do it properly, like human
-      Ok(Response::new(format!("{{
-        \"timestamp\": {},
-        \"last_minute_stats\": {{
-          \"metrics\": {},
-          \"logs\": {},
-          \"logs_bytes\": {}
-        }},
-        \"total_stats\": {{
-          \"metrics\": {},
-          \"logs\": {},
-          \"logs_bytes\": {}
-        }}}}",
-        get_now(),
-        (*statistics).p_metrics,
-        (*statistics).p_logs,
-        (*statistics).p_logs_bytes,
-        (*statistics).metrics,
-        (*statistics).logs,
-        (*statistics).logs_bytes).into()))
     }
     else if uri.starts_with("/metrics") {
       let statistics = statistics.lock().unwrap();
@@ -98,12 +81,6 @@ sumock_logs_bytes_count {}",
             let metric_name = line.split("{").nth(0).unwrap().to_string();
             let saved_metric = (*statistics).metrics_list.entry(metric_name).or_insert(0);
             *saved_metric += 1;
-            // if (*statistics).metrics_list.contains_key(&metric_name) {
-            //   (*statistics).metrics_list.insert(metric_name, 0);
-            // }
-            // else {
-            //   (*statistics).metrics_list
-            // }
             (*statistics).metrics += 1;
           }
         },
